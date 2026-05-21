@@ -46,16 +46,37 @@ def _discover_openclaw_models() -> set[str]:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Initialize router on startup. Auto-discover OpenClaw models."""
-    available_models = _discover_openclaw_models()
-    if available_models:
-        print(f"[model-router] Discovered {len(available_models)} configured models: {available_models}")
-
-    app.state.router = ModelRouter(
+    router = ModelRouter(
         bundle_dir=os.environ.get("MODEL_ROUTER_MODELS_DIR", "./models"),
         tiers_path=os.environ.get("MODEL_ROUTER_TIERS_PATH", "./tiers.json"),
-        available_models=available_models or None,
     )
+    app.state.router = router
+    app.state._config_mtime = 0.0
     yield
+
+
+def _get_openclaw_config_mtime() -> float:
+    """Get mtime of OpenClaw config file, or 0 if not found."""
+    config_path = os.environ.get("MODEL_ROUTER_OPENCLAW_CONFIG")
+    if config_path:
+        path = Path(config_path)
+    else:
+        path = Path.home() / ".openclaw" / "openclaw.json"
+    if path.exists():
+        return path.stat().st_mtime
+    return 0.0
+
+
+def _refresh_available_models_if_changed(app: FastAPI) -> None:
+    """Re-read OpenClaw config if file has changed since last check."""
+    current_mtime = _get_openclaw_config_mtime()
+    if current_mtime == app.state._config_mtime:
+        return
+    app.state._config_mtime = current_mtime
+    models = _discover_openclaw_models()
+    if models:
+        app.state.router._available_models = models
+        print(f"[model-router] Refreshed available models ({len(models)}): {models}")
 
 
 app = FastAPI(title="agent-model-router", version="0.1.0", lifespan=lifespan)
@@ -86,6 +107,7 @@ def health():
 @app.post("/classify", response_model=ClassifyResponse)
 def classify(request: ClassifyRequest):
     """Classify a prompt and return the optimal model with provider."""
+    _refresh_available_models_if_changed(app)
     router: ModelRouter = app.state.router
     tier, confidence, source, extra = router.classify(
         message=request.message,
