@@ -30,16 +30,32 @@ Map the returned `tier` to your own model IDs and you're done.
 
 ## Quick Start (3 Steps) / 快速开始（3 步）
 
-### 1. Install / 安装
+### One-Click Install / 一键安装
 
 ```bash
 git clone https://github.com/fengjing1009/agent-model-router.git
 cd agent-model-router
+
+# Basic mode (rule-based routing, no models) / 基础模式
+bash scripts/setup.sh
+
+# Full mode (ML inference) / 完整模式（推荐）
+bash scripts/setup.sh --ml
+
+# Full mode + start HTTP service / 完整模式 + 启动服务
+bash scripts/setup.sh --ml --server
+```
+
+### Manual Install / 手动安装
+
+### Manual Install / 手动安装
+
+```bash
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[ml]"
 ```
 
-### 2. Download Models / 下载模型
+### Download Models / 下载模型
 
 ```bash
 python scripts/download_models.py
@@ -48,7 +64,7 @@ python scripts/download_models.py
 Models are downloaded to `models/v4.2_phase3_inference/` (about 84MB, gitignored).
 模型文件会下载到 `models/v4.2_phase3_inference/` 目录（约 84MB，已 gitignore）。
 
-### 3. Try It / 试一下
+### Try It / 试一下
 
 ```bash
 python -c "
@@ -465,17 +481,55 @@ User request → Feature extraction(390-dim) → 3-head ensemble → 8-step post
 
 ## Install Options / 安装选项
 
+| Mode / 模式 | 安装命令 | 适用场景 |
+|------------|----------|---------|
+| **基础（规则路由）** | `pip install -e .` | 不需要 ML 模型，用启发式规则路由（问候→t0，代码关键词→t2，其余→t1）|
+| **完整版（ML 推理）** | `pip install -e ".[ml]"` | 使用 390 维特征 + LightGBM/ONNX 模型进行智能路由 **（推荐）** |
+| **开发版** | `pip install -e ".[ml,dev]"` | 含测试工具 |
+
+### 基础模式（不需要下载模型）
+
+只安装核心依赖，路由基于启发式规则，不需要下载 ML 模型文件：
+
 ```bash
-pip install -e .          # Basic — HTTP service only, no numpy / 基础版
-pip install -e ".[ml]"    # Full — with ML inference (recommended) / 完整版（推荐）
-pip install -e ".[ml,dev]" # Dev — with test tools / 开发版
+git clone https://github.com/fengjing1009/agent-model-router.git
+cd agent-model-router
+pip install -e .  # 不需要 [ml]，不需要下载模型
+
+python -c "
+from model_router import ModelRouter
+r = ModelRouter()  # ML 不可用，自动降级到启发式规则
+print(r.classify('你好'))              # → t0 (heuristic)
+print(r.classify('帮我分析这段代码'))   # → t2 (heuristic)
+print(r.classify('总结这段文字'))       # → t1 (heuristic)
+"
 ```
 
-| Category / 分类 | Packages / 包 |
-|-----------------|---------------|
-| Core / 核心 | pydantic, fastapi, uvicorn, pyyaml |
-| ML | numpy, onnxruntime, lightgbm, scikit-learn, tokenizers |
-| Dev / 开发 | pytest, httpx |
+> **注意**：HTTP 服务同样可以启动，但不需要 `uvicorn` 以外的 ML 依赖。
+> `uvicorn server.service:app --host 0.0.0.0 --port 8100`
+
+### 完整版（推荐 — ML 智能路由）
+
+安装 ML 依赖并下载模型文件，使用 390 维特征 + 三头集成预测：
+
+```bash
+pip install -e ".[ml]"
+python scripts/download_models.py    # 下载约 84MB 模型文件
+
+from model_router import ModelRouter
+r = ModelRouter()                    # ML 加载成功
+print(r.classify('你好'))            # → t0 (v4_phase3, 97% 置信度)
+print(r.classify('用 Python 实现一个快速排序'))  # → t1 (v4_phase3, 59%)
+print(r.classify('对比分析微服务架构和单体架构')) # → t2 (v4_phase3)
+```
+
+| 对比 | 基础模式 | 完整版 |
+|------|---------|-------|
+| ML 模型 | ❌ | ✅ LightGBM + ONNX |
+| 下载模型 | 不需要 | `python scripts/download_models.py` (~84MB) |
+| 路由方式 | 启发式规则 | 390 维特征 + ML 推理 |
+| 置信度 | 固定值 (0.0-0.5) | 真实计算 (0.0-1.0) |
+| 适用场景 | 快速试用、HTTP 服务 | 生产环境、精准路由 |
 
 ## Environment Variables / 环境变量
 
