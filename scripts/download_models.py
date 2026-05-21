@@ -8,6 +8,7 @@ import os
 import sys
 import urllib.request
 import json
+import ssl
 from pathlib import Path
 
 GITHUB_REPO = "opensquilla/opensquilla"
@@ -82,8 +83,9 @@ def download_from_opensquilla(output_dir: Path) -> Path | None:
 
         print(f"[{i}/{total}] Downloading {file_path}...")
         try:
+            ctx = ssl.create_default_context()
             req = urllib.request.Request(url)
-            with urllib.request.urlopen(req, timeout=120) as resp:
+            with urllib.request.urlopen(req, context=ctx, timeout=120) as resp:
                 data = resp.read()
             dest.write_bytes(data)
 
