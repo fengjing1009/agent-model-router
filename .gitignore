@@ -7,6 +7,7 @@ models/
 !tiers.json
 !pyproject.toml
 !package.json
+!integrations/openclaw/plugins/agent-model-router/openclaw.plugin.json
 
 # Python
 __pycache__/

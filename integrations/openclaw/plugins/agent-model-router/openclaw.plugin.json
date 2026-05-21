@@ -1,0 +1,24 @@
+{
+  "id": "agent-model-router",
+  "activation": {
+    "onStartup": true
+  },
+  "name": "Agent Model Router",
+  "description": "LLM intelligent routing — auto-select optimal model tier before each request",
+  "hooks": {
+    "preRequest": {
+      "handler": "./index.js"
+    }
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "serviceUrl": {
+        "type": "string",
+        "default": "http://localhost:8100",
+        "description": "Model router HTTP service URL"
+      }
+    }
+  }
+}
