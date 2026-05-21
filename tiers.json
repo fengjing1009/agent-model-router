@@ -8,8 +8,8 @@
   {
     "tier": "t0",
     "models": [
-      {"id": "glm-4.7", "provider": "bailian"},
-      {"id": "MiniMax-M2.5", "provider": "bailian"}
+      {"id": "MiniMax-M2.5", "provider": "bailian"},
+      {"id": "glm-4.7", "provider": "bailian"}
     ],
     "description": "快速 & 低成本 — 简单问答、分类、寒暄"
   },
