@@ -1,13 +1,5 @@
-# Models
-models/
-*.onnx
-*.pkl
-*.joblib
-*.json
-!tiers.json
-!pyproject.toml
-!package.json
-!integrations/openclaw/plugins/agent-model-router/openclaw.plugin.json
+# Models - now included in repo (Git LFS recommended for large files)
+# models/
 
 # Python
 __pycache__/

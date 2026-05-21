@@ -4,6 +4,8 @@
 
 🌐 **[English README →](README.md)**
 
+> 参考 [OpenSquilla](https://github.com/opensquilla/opensquilla) 中的路由实现该项目。
+
 复杂任务用高级推理模型，简单查询用快速/低成本模型。
 每条消息分析后自动选择最优模型，节省成本、保证质量。
 

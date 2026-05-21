@@ -6,6 +6,8 @@
 
 🌐 **[中文版 README →](README_zh.md)** | **[English README →](README.md)**
 
+> This project is based on the routing implementation in [OpenSquilla](https://github.com/opensquilla/opensquilla).
+
 Complex tasks get premium reasoning models, simple queries get fast models.
 复杂任务用高级推理模型，简单查询用快速/低成本模型。
 
