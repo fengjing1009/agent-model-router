@@ -3,10 +3,6 @@
   "version": "0.1.0",
   "description": "OpenClaw plugin for LLM intelligent model routing",
   "main": "index.js",
-  "openclaw": {
-    "extensions": ["./index.js"],
-    "hooks": ["./index.js"]
-  },
   "keywords": ["openclaw-plugin", "model-routing", "llm"],
   "license": "Apache-2.0",
   "engines": {

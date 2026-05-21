@@ -5,11 +5,6 @@
   },
   "name": "Agent Model Router",
   "description": "LLM intelligent routing — auto-select optimal model tier before each request",
-  "hooks": {
-    "preRequest": {
-      "handler": "./index.js"
-    }
-  },
   "configSchema": {
     "type": "object",
     "additionalProperties": false,
