@@ -21,11 +21,7 @@ RAW_FILES = [
     "bge_onnx/tokenizer.json",
     "bge_onnx/tokenizer_config.json",
     "bge_onnx/vocab.txt",
-    "features/bge_pca.joblib",
-    "features/config.pkl",
     "features/meta.json",
-    "features/svd.pkl",
-    "features/tfidf.pkl",
     "inference_manifest.json",
     "mlp/scaler.joblib",
     "router.runtime.yaml",
@@ -35,6 +31,10 @@ RAW_FILES = [
 # LFS files: need media.githubusercontent.com to get actual binaries
 LFS_FILES = [
     "bge_onnx/model.onnx",
+    "features/bge_pca.joblib",
+    "features/config.pkl",
+    "features/svd.pkl",
+    "features/tfidf.pkl",
     "lgbm_aux.bin",
     "lgbm_main.bin",
     "mlp/model.onnx",
