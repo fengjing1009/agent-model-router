@@ -2,6 +2,8 @@
 
 > LLM 智能路由引擎 — 把用户请求自动分到最合适的模型。
 
+🌐 **[English README →](README.md)**
+
 复杂任务用高级推理模型（Claude Opus/Sonnet），简单查询用快速/低成本模型（Haiku）。
 每条消息分析后自动选择最优模型，节省成本、保证质量。
 
@@ -26,7 +28,7 @@ print(tier)  # → "t0"  选 fast 模型
 ### 1. 安装
 
 ```bash
-git clone https://github.com/your-org/agent-model-router.git
+git clone https://github.com/fengjing1009/agent-model-router.git
 cd agent-model-router
 pip install -e ".[ml]"
 ```
@@ -117,8 +119,6 @@ def call_llm(messages):
 
 Hermes Agent 是一个 Python Agent 框架。插件会**拦截每次 LLM 请求**，自动选模型。
 
-**安装：** 确保 `agent-model-router` 已安装。
-
 **在 Hermes 配置中注册插件：**
 
 ```python
@@ -176,12 +176,6 @@ OpenClaw 是 Node.js 框架，不能直接 import Python 包。
 
 ```bash
 uvicorn server.service:app --host 0.0.0.0 --port 8100
-```
-
-或使用环境变量：
-```bash
-MODEL_ROUTER_MODELS_DIR=./models MODEL_ROUTER_PORT=8100 \
-  uvicorn server.service:app --host 0.0.0.0 --port 8100
 ```
 
 验证服务：
