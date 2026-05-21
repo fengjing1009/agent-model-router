@@ -1,0 +1,28 @@
+# Tiers configuration for agent-model-router
+# Edit this file to customize model routing.
+# Each tier defines a model group and the confidence thresholds for routing.
+
+[
+  {
+    "tier": "premium",
+    "models": ["claude-sonnet-4-5-20250514", "gpt-4.1", "gemini-2.5-pro"],
+    "description": "Best quality — complex reasoning, coding, analysis",
+    "threshold": 0.6
+  },
+  {
+    "tier": "standard",
+    "models": ["claude-sonnet-4-20250514", "gpt-4o-mini", "gemini-2.0-flash"],
+    "description": "Balanced — general-purpose conversation and tasks",
+    "threshold": 0.4
+  },
+  {
+    "tier": "fast",
+    "models": ["claude-haiku-4-5-20251001", "gpt-4o-mini", "gemini-2.0-flash-lite"],
+    "description": "Fast & cheap — simple queries, classification, extraction"
+  },
+  {
+    "tier": "fallback",
+    "models": ["claude-haiku-4-5-20251001"],
+    "description": "Default fallback when confidence is low"
+  }
+]

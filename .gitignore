@@ -1,0 +1,41 @@
+# Models
+models/
+*.onnx
+*.pkl
+*.joblib
+*.json
+!tiers.json
+!pyproject.toml
+!package.json
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env
+.env
+
+# Releases
+*.tar.gz
+*.zip

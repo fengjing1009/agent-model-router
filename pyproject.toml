@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "model-router"
+version = "0.1.0"
+description = "LLM intelligent routing engine — classifies user prompts to optimal model tiers"
+readme = "README.md"
+license = {text = "Apache-2.0"}
+requires-python = ">=3.10"
+dependencies = [
+    "pydantic>=2.0",
+    "fastapi>=0.110",
+    "uvicorn>=0.29",
+]
+
+[project.optional-dependencies]
+ml = [
+    "numpy>=1.24",
+    "onnxruntime>=1.15",
+    "lightgbm>=4.0",
+    "scikit-learn>=1.3",
+    "tokenizers>=0.15",
+    "pyyaml>=6.0",
+]
+server = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
+]
+dev = [
+    "pytest>=7.0",
+    "httpx>=0.27",
+]
+
+[project.scripts]
+download-models = "model_router.scripts.download_models:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+model_router = ["py.typed"]

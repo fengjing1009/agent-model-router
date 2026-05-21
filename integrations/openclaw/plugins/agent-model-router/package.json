@@ -1,0 +1,11 @@
+{
+  "name": "agent-model-router",
+  "version": "0.1.0",
+  "description": "OpenClaw plugin for LLM intelligent model routing",
+  "main": "index.js",
+  "keywords": ["openclaw-plugin", "model-routing", "llm"],
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
