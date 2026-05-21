@@ -8,15 +8,16 @@
   {
     "tier": "t0",
     "models": [
-      {"id": "qwen3.5-plus", "provider": "bailian"}
+      {"id": "glm-4.7", "provider": "bailian"},
+      {"id": "MiniMax-M2.5", "provider": "bailian"}
     ],
     "description": "快速 & 低成本 — 简单问答、分类、寒暄"
   },
   {
     "tier": "t1",
     "models": [
-      {"id": "qwen3-max-2026-01-23", "provider": "bailian"},
-      {"id": "MiniMax-M2.5", "provider": "bailian"}
+      {"id": "qwen3.5-plus", "provider": "bailian"},
+      {"id": "qwen3-max-2026-01-23", "provider": "bailian"}
     ],
     "description": "均衡 — 翻译、总结、常规编程任务",
     "threshold": 0.4
@@ -33,8 +34,9 @@
   {
     "tier": "t3",
     "models": [
-      {"id": "qwen3-coder-plus", "provider": "bailian"},
-      {"id": "qwen3-coder-next", "provider": "bailian"}
+      {"id": "qwen3.6-plus", "provider": "bailian"},
+      {"id": "qwen3-coder-next", "provider": "bailian"},
+      {"id": "qwen3-coder-plus", "provider": "bailian"}
     ],
     "description": "深度推理 — 架构设计、复杂推理、代码优化"
   }
