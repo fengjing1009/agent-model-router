@@ -6,7 +6,7 @@
 
 🌐 **[中文版 README →](README_zh.md)** | **[English README →](README.md)**
 
-Complex tasks get premium reasoning models (Claude Opus/Sonnet), simple queries get fast/cheap models (Haiku).
+Complex tasks get premium reasoning models, simple queries get fast models.
 复杂任务用高级推理模型，简单查询用快速/低成本模型。
 
 ---
@@ -87,7 +87,7 @@ tier, confidence, source, extra = router.classify(
 )
 
 # Map tier to your model IDs from tiers.json / 根据 tiers.json 映射到模型
-models = router.get_tier_models(tier)  # → ["claude-sonnet-4-5-20250514"]
+models = router.get_tier_models(tier)  # → ["glm-5", "qwen3-max-2026-01-23"]
 selected_model = models[0]
 ```
 
@@ -161,7 +161,7 @@ plugin = ModelRouterPlugin()
 
 context = {
     "messages": [{"role": "user", "content": "你好"}],
-    "model": "claude-haiku-4-5",  # Default model / 默认模型
+    "model": "qwen3.5-plus",  # Default model / 默认模型
     "session_id": "abc-123",
 }
 
@@ -169,7 +169,7 @@ context = {
 new_context = plugin.pre_api_request(context)
 
 print(new_context["model"])
-# → "claude-sonnet-4-5-20250514" (auto-upgraded to premium / 已自动升级为 premium)
+# → "glm-5" (auto-upgraded to premium / 已自动升级为 premium)
 
 print(new_context["router_metadata"])
 # → {"tier": "t2", "confidence": 0.92, ...}
@@ -298,12 +298,12 @@ Edit `tiers.json` / 编辑 `tiers.json`：
 [
   {
     "tier": "t0",
-    "models": ["claude-haiku-4-5-20251001"],
+    "models": ["qwen3.5-plus"],
     "description": "Fast & cheap / 快速低成本"
   },
   {
     "tier": "t2",
-    "models": ["claude-sonnet-4-5-20250514", "gpt-4.1"],
+    "models": ["glm-5", "qwen3-max-2026-01-23"],
     "description": "Best quality / 最佳质量"
   }
 ]
@@ -318,7 +318,7 @@ router.reload_tiers()
 List models for a tier / 查看某层级的模型：
 ```python
 router.get_tier_models("t2")
-# → ["claude-sonnet-4-5-20250514", "gpt-4.1"]
+# → ["glm-5", "qwen3-max-2026-01-23"]
 ```
 
 List all tiers / 查看所有层级：

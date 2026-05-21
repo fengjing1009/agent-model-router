@@ -78,12 +78,12 @@ async function preRequest(context) {
     if (extra?.model) {
       context.model = extra.model;
     } else if (tier) {
-      // Map tier to model name (fallback mapping)
+      // Map tier to model name (fallback mapping — matches tiers.json)
       const tierModelMap = {
-        premium: "claude-sonnet-4-5-20250514",
-        standard: "claude-sonnet-4-20250514",
-        fast: "claude-haiku-4-5-20251001",
-        fallback: "claude-haiku-4-5-20251001",
+        t0: "qwen3.5-plus",
+        t1: "kimi-k2.5",
+        t2: "glm-5",
+        t3: "qwen3-coder-plus",
       };
       context.model = tierModelMap[tier] || model;
     }

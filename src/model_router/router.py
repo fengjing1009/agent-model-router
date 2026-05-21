@@ -327,10 +327,10 @@ class ModelRouter:
         """Load tier configuration from JSON file."""
         if not self.tiers_path.exists():
             return [
-                {"tier": "t0", "models": ["claude-haiku-4-5-20251001"]},
-                {"tier": "t1", "models": ["claude-sonnet-4-20250514"]},
-                {"tier": "t2", "models": ["claude-sonnet-4-5-20250514"]},
-                {"tier": "t3", "models": ["claude-opus-4-6"]},
+                {"tier": "t0", "models": ["qwen3.5-plus"]},
+                {"tier": "t1", "models": ["kimi-k2.5"]},
+                {"tier": "t2", "models": ["glm-5"]},
+                {"tier": "t3", "models": ["qwen3-coder-plus"]},
             ]
         text = self.tiers_path.read_text()
         lines = [l for l in text.splitlines() if not l.strip().startswith('#')]

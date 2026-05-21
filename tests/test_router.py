@@ -13,10 +13,10 @@ import pytest
 def temp_tiers():
     """Create a temporary tiers.json for testing."""
     tiers = [
-        {"tier": "t0", "models": ["claude-haiku-4-5-20251001"]},
-        {"tier": "t1", "models": ["claude-sonnet-4-20250514"]},
-        {"tier": "t2", "models": ["claude-sonnet-4-5-20250514"]},
-        {"tier": "t3", "models": ["claude-opus-4-6"]},
+        {"tier": "t0", "models": ["qwen3.5-plus"]},
+        {"tier": "t1", "models": ["kimi-k2.5"]},
+        {"tier": "t2", "models": ["glm-5", "qwen3-max-2026-01-23"]},
+        {"tier": "t3", "models": ["qwen3-coder-plus"]},
     ]
     with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
         json.dump(tiers, f)
@@ -62,7 +62,7 @@ def test_get_tier_models(temp_tiers, temp_models_dir):
         tiers_path=temp_tiers,
     )
     models = router.get_tier_models("t2")
-    assert "claude-sonnet-4-5-20250514" in models
+    assert "glm-5" in models
 
 
 def test_reload_tiers(temp_tiers, temp_models_dir):
@@ -74,7 +74,7 @@ def test_reload_tiers(temp_tiers, temp_models_dir):
     )
     # Modify tiers file
     tiers = json.loads(Path(temp_tiers).read_text())
-    tiers.append({"tier": "t4", "models": ["claude-opus-4-6"]})
+    tiers.append({"tier": "t4", "models": ["qwen3-coder-next"]})
     Path(temp_tiers).write_text(json.dumps(tiers))
     # get_available_tiers loads from file each call
     assert "t4" in router.get_available_tiers()
