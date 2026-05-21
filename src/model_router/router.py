@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import sys
+import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -21,6 +22,30 @@ _ROUTE_CLASS_TO_TIER: dict[str, str] = {
     "R2": "t2",
     "R3": "t3",
 }
+
+
+class HealthTracker:
+    """Track per-model failure state.  Models that fail are temporarily
+    excluded from tier model selection, rotating to the next available one."""
+
+    def __init__(self, failure_ttl: int = 300, max_failures: int = 3) -> None:
+        self.failure_ttl = failure_ttl  # seconds to consider a failure active
+        self.max_failures = max_failures  # consecutive failures before excluding
+        self._failures: dict[str, list[float]] = {}
+
+    def report_failure(self, model: str) -> None:
+        self._failures.setdefault(model, []).append(time.time())
+
+    def is_healthy(self, model: str) -> bool:
+        cutoff = time.time() - self.failure_ttl
+        recent = [t for t in self._failures.get(model, []) if t > cutoff]
+        return len(recent) < self.max_failures
+
+    def healthy_models(self, tier: str, models: list[str]) -> list[str]:
+        return [m for m in models if self.is_healthy(m)] or list(models)
+
+    def reset(self, model: str) -> None:
+        self._failures.pop(model, None)
 
 
 def default_bundle_dir() -> Path:
@@ -94,6 +119,8 @@ class ModelRouter:
         self._config: dict[str, Any] = {}
         self._model_version = "unknown"
         self._available = False
+        self._health = HealthTracker()
+        self._tier_cache: dict = {}  # cached tier config with provider info
 
         try:
             self._init_runtime(use_aux_head=use_aux_head)
@@ -146,6 +173,22 @@ class ModelRouter:
                     return str(value)
         return "unknown"
 
+    def _extract_user_model(self, message: str) -> str | None:
+        """Detect if user explicitly specified a model in the prompt."""
+        import re
+        patterns = [
+            r"[Uu]se\s+model[:\s]+([\w.\/-]+)",
+            r"用模型\s*([\w.\/-]+)",
+            r"使用模型\s*([\w.\/-]+)",
+            r"model[:\s]+([\w.\/-]+)",
+            r"model=([\w.\/-]+)",
+        ]
+        for pat in patterns:
+            m = re.search(pat, message)
+            if m:
+                return m.group(1).strip().rstrip(".,，!！？、;；")
+        return None
+
     def classify(
         self,
         message: str,
@@ -162,10 +205,24 @@ class ModelRouter:
         Returns:
             Tuple of (tier, confidence, source, extra).
         """
+        # Check if user explicitly specified a model
+        user_model = self._extract_user_model(message)
+        if user_model:
+            provider = self.get_model_provider(user_model) or "bailian"
+            return user_model, 1.0, "user_specified", {
+                "route_class": "R1",
+                "top1_label": "R1",
+                "thinking_mode": "T1",
+                "prompt_policy": "P1",
+                "model": user_model,
+                "provider": provider,
+                "model_version": self._model_version,
+            }
+
         valid_tiers = self.get_available_tiers()
 
         if not self._available or self._core is None or self._request_type is None:
-            return self._unavailable_classify(valid_tiers)
+            return self._unavailable_classify(valid_tiers, message)
 
         try:
             request = self._build_request(
@@ -178,22 +235,65 @@ class ModelRouter:
         except Exception:
             if self._require_router_runtime:
                 raise
-            return self._unavailable_classify(valid_tiers)
+            return self._unavailable_classify(valid_tiers, message)
 
     def _unavailable_classify(
         self,
         valid_tiers: list[str],
+        message: str = "",
     ) -> tuple[str, float, str, dict]:
+        """Rule-based fallback when ML models are not loaded."""
+        _greeting = {"你好", "hello", "hi", "hey", "嗨", "嗨嗨", "哈喽", "在吗", "在不在",
+                     "谢谢", "感谢", "thanks", "thank you", "bye", "再见", "好的", "ok",
+                     "好的好的", "嗯嗯", "没问题", "明白", "收到", "知道了"}
+        stripped = message.strip().lower()
+        if len(stripped) <= 20:
+            for g in _greeting:
+                if g in stripped:
+                    tier = _find_valid_tier("t0", valid_tiers)
+                    route_class = next(
+                        (key for key, value in _ROUTE_CLASS_TO_TIER.items() if value == tier),
+                        "R0",
+                    )
+                    model, provider = self._resolve_model(tier)
+                    return tier, 0.5, "heuristic", {
+                        "route_class": route_class,
+                        "top1_label": route_class,
+                        "thinking_mode": "T0",
+                        "prompt_policy": "P0",
+                        "model": model,
+                        "provider": provider,
+                        "model_version": self._model_version,
+                    }
+        if any(kw in stripped for kw in ("```", "def ", "class ", "import ", "function ", "实现", "调试", "重构")):
+            tier = _find_valid_tier("t2", valid_tiers)
+            route_class = next(
+                (key for key, value in _ROUTE_CLASS_TO_TIER.items() if value == tier),
+                "R2",
+            )
+            model, provider = self._resolve_model(tier)
+            return tier, 0.4, "heuristic", {
+                "route_class": route_class,
+                "top1_label": route_class,
+                "thinking_mode": "T2",
+                "prompt_policy": "P2",
+                "model": model,
+                "provider": provider,
+                "model_version": self._model_version,
+            }
         tier = _find_valid_tier("t1", valid_tiers)
         route_class = next(
             (key for key, value in _ROUTE_CLASS_TO_TIER.items() if value == tier),
             "R1",
         )
+        model, provider = self._resolve_model(tier)
         return tier, 0.0, "v4_unavailable", {
             "route_class": route_class,
             "top1_label": route_class,
             "thinking_mode": "T1",
             "prompt_policy": "P1",
+            "model": model,
+            "provider": provider,
             "model_version": self._model_version,
         }
 
@@ -299,6 +399,12 @@ class ModelRouter:
         )
         if prompt_hint:
             extra["prompt_hint"] = str(prompt_hint)
+
+        # Resolve concrete model and provider from tier config
+        model, provider = self._resolve_model(tier)
+        extra["model"] = model
+        extra["provider"] = provider
+
         return tier, confidence, self.source, extra
 
     def _prompt_hint(self, prompt_policy: str, message: str | None = None) -> str | None:
@@ -310,13 +416,52 @@ class ModelRouter:
         tiers = self._load_tiers()
         for t in tiers:
             if t["tier"] == tier:
-                return t.get("models", [])
+                raw = t.get("models", [])
+                return [m["id"] if isinstance(m, dict) else m for m in raw]
         return []
+
+    def get_model_provider(self, model: str) -> str | None:
+        """Get the provider ID for a specific model name."""
+        tiers = self._load_tiers()
+        for t in tiers:
+            for m in t.get("models", []):
+                if isinstance(m, dict) and m.get("id") == model:
+                    return m.get("provider", "bailian")
+                if isinstance(m, str) and m == model:
+                    return t.get("provider", "bailian")
+        return None
+
+    def _resolve_model(self, tier: str) -> tuple[str, str]:
+        """Pick the first healthy model from the tier and return (model_id, provider)."""
+        raw_models = []
+        for t in self._load_tiers():
+            if t["tier"] == tier:
+                raw_models = t.get("models", [])
+                break
+
+        # Build list of (id, provider) tuples
+        model_list: list[tuple[str, str]] = []
+        for m in raw_models:
+            if isinstance(m, dict):
+                model_list.append((m["id"], m.get("provider", "bailian")))
+            else:
+                model_list.append((m, "bailian"))
+
+        model_ids = [mid for mid, _ in model_list]
+        healthy_ids = self._health.healthy_models(tier, model_ids)
+
+        # Pick first healthy, or first available, or unknown
+        chosen_id = healthy_ids[0] if healthy_ids else (model_ids[0] if model_ids else "unknown")
+        chosen_provider = dict(model_list).get(chosen_id, "bailian")
+        return chosen_id, chosen_provider
+
+    def report_failure(self, model: str) -> None:
+        """Report a model failure so it will be skipped in future classifications."""
+        self._health.report_failure(model)
 
     def reload_tiers(self) -> None:
         """Reload tier configuration from disk."""
-        # Runtime config is reloaded on next classify
-        pass
+        self._tier_cache.clear()
 
     def get_available_tiers(self) -> list[str]:
         """Get list of all available tier names."""
@@ -327,10 +472,10 @@ class ModelRouter:
         """Load tier configuration from JSON file."""
         if not self.tiers_path.exists():
             return [
-                {"tier": "t0", "models": ["qwen3.5-plus"]},
-                {"tier": "t1", "models": ["kimi-k2.5"]},
-                {"tier": "t2", "models": ["glm-5"]},
-                {"tier": "t3", "models": ["qwen3-coder-plus"]},
+                {"tier": "t0", "models": [{"id": "Qwen3-27B-AWQ", "provider": "local"}, {"id": "qwen3.5-plus", "provider": "bailian"}]},
+                {"tier": "t1", "models": [{"id": "MiniMax-M2.5", "provider": "bailian"}]},
+                {"tier": "t2", "models": [{"id": "kimi-k2.5", "provider": "bailian"}]},
+                {"tier": "t3", "models": [{"id": "qwen3-coder-plus", "provider": "bailian"}]},
             ]
         text = self.tiers_path.read_text()
         lines = [l for l in text.splitlines() if not l.strip().startswith('#')]

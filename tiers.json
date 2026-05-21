@@ -1,29 +1,42 @@
 # Tiers configuration for agent-model-router
 # Edit this file to customize model routing.
 # Tier names (t0–t3) must match internal route classes (R0–R3).
-# Models: Aliyun 百炼 Coding Plan — https://help.aliyun.com/zh/model-studio/coding-plan
+# Each model has its own provider — models in the same tier can use different providers.
+# Models: Aliyun 百炼 Coding Plan + 本地部署 — https://help.aliyun.com/zh/model-studio/coding-plan
 
 [
   {
     "tier": "t0",
-    "models": ["qwen3.5-plus"],
+    "models": [
+      {"id": "Qwen3-27B-AWQ", "provider": "local"},
+      {"id": "qwen3.5-plus", "provider": "bailian"}
+    ],
     "description": "快速 & 低成本 — 简单问答、分类、寒暄"
   },
   {
     "tier": "t1",
-    "models": ["kimi-k2.5", "minimax-m2.5"],
-    "description": "均衡 — 翻译、总结、一般性问答",
+    "models": [
+      {"id": "MiniMax-M2.5", "provider": "bailian"},
+      {"id": "qwen3-max-2026-01-23", "provider": "bailian"}
+    ],
+    "description": "均衡 — 翻译、总结、常规编程任务",
     "threshold": 0.4
   },
   {
     "tier": "t2",
-    "models": ["glm-5", "qwen3-max-2026-01-23"],
-    "description": "最佳质量 — 编程、分析、调试",
+    "models": [
+      {"id": "kimi-k2.5", "provider": "bailian"},
+      {"id": "glm-5", "provider": "bailian"}
+    ],
+    "description": "最佳质量 — 复杂编程、代码分析、调试",
     "threshold": 0.6
   },
   {
     "tier": "t3",
-    "models": ["qwen3-coder-plus", "qwen3-coder-next"],
+    "models": [
+      {"id": "qwen3-coder-plus", "provider": "bailian"},
+      {"id": "qwen3-coder-next", "provider": "bailian"}
+    ],
     "description": "深度推理 — 架构设计、复杂推理、代码优化"
   }
 ]

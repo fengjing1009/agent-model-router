@@ -32,6 +32,8 @@ class ClassifyRequest(BaseModel):
 
 class ClassifyResponse(BaseModel):
     tier: str
+    model: str
+    provider: str
     confidence: float
     source: str
     extra: dict
@@ -46,19 +48,50 @@ def health():
 
 @app.post("/classify", response_model=ClassifyResponse)
 def classify(request: ClassifyRequest):
-    """Classify a prompt and return the optimal model tier."""
+    """Classify a prompt and return the optimal model with provider."""
     router: ModelRouter = app.state.router
     tier, confidence, source, extra = router.classify(
         message=request.message,
         history=request.history,
         session_id=request.session_id,
     )
+    model = extra.pop("model", "")
+    provider = extra.pop("provider", "")
     return ClassifyResponse(
         tier=tier,
+        model=model,
+        provider=provider,
         confidence=confidence,
         source=source,
         extra=extra,
     )
+
+
+@app.post("/health/report")
+def report_failure(model_name: str):
+    """Report a model failure so it is temporarily excluded from routing."""
+    router: ModelRouter = app.state.router
+    router.report_failure(model_name)
+    return {"status": "ok", "reported_failure": model_name}
+
+
+@app.get("/health/status")
+def health_status():
+    """Get current health status of all tier models."""
+    router: ModelRouter = app.state.router
+    result = {}
+    for tier_name in router.get_available_tiers():
+        models = router.get_tier_models(tier_name)
+        result[tier_name] = {
+            "models": {
+                m: {
+                    "healthy": router._health.is_healthy(m),
+                    "provider": router.get_model_provider(m),
+                }
+                for m in models
+            }
+        }
+    return result
 
 
 @app.get("/tiers")
