@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import json
 import os
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from pydantic import BaseModel
@@ -11,12 +13,47 @@ from pydantic import BaseModel
 from model_router import ModelRouter
 
 
+def _discover_openclaw_models() -> set[str]:
+    """Read OpenClaw config to find which models are actually configured.
+
+    Checks ~/.openclaw/openclaw.json and MODEL_ROUTER_OPENCLAW_CONFIG env var.
+    """
+    config_path = os.environ.get("MODEL_ROUTER_OPENCLAW_CONFIG")
+    if config_path:
+        path = Path(config_path)
+    else:
+        home = Path.home()
+        path = home / ".openclaw" / "openclaw.json"
+
+    if not path.exists():
+        return set()
+
+    try:
+        data = json.loads(path.read_text())
+        models = set()
+        providers = data.get("models", {}).get("providers", {})
+        for provider_id, provider_cfg in providers.items():
+            for model in provider_cfg.get("models", []):
+                if isinstance(model, dict):
+                    models.add(model.get("id", ""))
+                elif isinstance(model, str):
+                    models.add(model)
+        return models - {""}
+    except Exception:
+        return set()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Initialize router on startup."""
+    """Initialize router on startup. Auto-discover OpenClaw models."""
+    available_models = _discover_openclaw_models()
+    if available_models:
+        print(f"[model-router] Discovered {len(available_models)} configured models: {available_models}")
+
     app.state.router = ModelRouter(
         bundle_dir=os.environ.get("MODEL_ROUTER_MODELS_DIR", "./models"),
         tiers_path=os.environ.get("MODEL_ROUTER_TIERS_PATH", "./tiers.json"),
+        available_models=available_models or None,
     )
     yield
 

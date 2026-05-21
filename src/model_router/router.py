@@ -100,6 +100,7 @@ class ModelRouter:
         confidence_threshold: float = 0.5,
         require_router_runtime: bool = False,
         use_aux_head: bool | None = None,
+        available_models: set[str] | None = None,
     ) -> None:
         """Initialize the router.
 
@@ -109,6 +110,9 @@ class ModelRouter:
             confidence_threshold: Minimum confidence for tier assignment.
             require_router_runtime: If True, raise on init failure instead of falling back.
             use_aux_head: Enable auxiliary LGBM head for upgrade/downgrade decisions.
+            available_models: Set of model IDs that are actually configured in the
+                upstream agent framework (e.g., OpenClaw). If provided, _resolve_model()
+                will prefer models in this set.
         """
         self.bundle_dir = Path(bundle_dir) if bundle_dir else default_bundle_dir()
         self.tiers_path = Path(tiers_path) if tiers_path else Path(__file__).resolve().parent.parent.parent / "tiers.json"
@@ -121,6 +125,7 @@ class ModelRouter:
         self._available = False
         self._health = HealthTracker()
         self._tier_cache: dict = {}  # cached tier config with provider info
+        self._available_models: set[str] | None = available_models
 
         try:
             self._init_runtime(use_aux_head=use_aux_head)
@@ -449,6 +454,18 @@ class ModelRouter:
 
         model_ids = [mid for mid, _ in model_list]
         healthy_ids = self._health.healthy_models(tier, model_ids)
+
+        # Prefer models that are actually configured in the upstream agent
+        if self._available_models:
+            configured = [m for m in healthy_ids if m in self._available_models]
+            if configured:
+                healthy_ids = configured
+            else:
+                # No healthy models are available in upstream config, fall back to all healthy
+                # but if none are configured at all, try all upstream-configured models
+                fallback = [m for m in model_ids if m in self._available_models]
+                if fallback:
+                    healthy_ids = fallback
 
         # Pick first healthy, or first available, or unknown
         chosen_id = healthy_ids[0] if healthy_ids else (model_ids[0] if model_ids else "unknown")
