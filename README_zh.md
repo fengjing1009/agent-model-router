@@ -181,7 +181,7 @@ uvicorn server.service:app --host 0.0.0.0 --port 8100
 验证服务：
 ```bash
 curl http://localhost:8100/health
-# → {"status": "ok", "model_loaded": true, "tiers": ["t0", "t1", "t2", "t3"]}
+# → {"status": "ok", "tiers": ["t0", "t1", "t2", "t3"]}
 ```
 
 #### 第 2 步：配置 OpenClaw 插件
@@ -207,16 +207,18 @@ MODEL_ROUTER_URL=http://localhost:8100
 #### 第 3 步：插件自动生效
 
 插件 `integrations/openclaw/plugins/agent-model-router/index.js`
-注册为 `preRequest` 钩子。每次 OpenClaw 发 LLM 请求前：
+注册为 `before_model_resolve` 钩子。每次 OpenClaw 发 LLM 请求前：
 
 ```
 用户发消息
-  → OpenClaw 触发 preRequest 钩子
+  → OpenClaw 触发 before_model_resolve 钩子
     → Node.js 插件 POST 到 http://localhost:8100/classify
-    → 返回 tier + 置信度
-    → 插件把 context.model 替换为该 tier 对应的模型
-  → OpenClaw 发送 LLM 请求（使用替换后的 model）
+    → 返回 tier + model + provider + confidence
+    → 插件返回 { modelOverride, providerOverride }
+  → OpenClaw 发送 LLM 请求（使用替换后的 model 和 provider）
 ```
+
+插件直接使用服务返回的 `model` 和 `provider`，无需在插件侧硬编码映射。
 
 **手动调用服务（不用插件）：**
 
@@ -233,10 +235,15 @@ curl -X POST http://localhost:8100/classify \
 ```json
 {
   "tier": "t2",
+  "model": "kimi-k2.5",
+  "provider": "bailian",
   "confidence": 0.87,
-  "source": "lgbm_main",
+  "source": "v4_phase3",
   "extra": {
-    "trajectory": "COLD_START",
+    "route_class": "R2",
+    "difficulty_score": 0.72,
+    "thinking_mode": "T2",
+    "prompt_policy": "P2",
     "flags": {}
   }
 }
@@ -263,8 +270,19 @@ console.log(data.tier); // → "t0"
 |----|------|------|
 | `tier` | `str` | 层级 ID（`t0`/`t1`/`t2`/`t3`） |
 | `confidence` | `float` | 分类置信度（0.0 ~ 1.0） |
-| `source` | `str` | 决策来源（`lgbm_main` / `lgbm_aux` / `mlp`） |
-| `extra` | `dict` | 元数据（对话轨迹、风险标志等） |
+| `source` | `str` | 决策来源（`v4_phase3` / `heuristic` / `user_specified`） |
+| `extra` | `dict` | 元数据（route_class、difficulty_score、model、provider 等） |
+
+HTTP `/classify` 端点返回：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `tier` | `str` | 层级 ID |
+| `model` | `str` | 选中的模型 ID |
+| `provider` | `str` | 模型提供商（`bailian` / `local` 等） |
+| `confidence` | `float` | 分类置信度 |
+| `source` | `str` | 决策来源 |
+| `extra` | `dict` | 额外元数据 |
 
 ## 路由类别
 
@@ -285,16 +303,40 @@ console.log(data.tier); // → "t0"
 [
   {
     "tier": "t0",
-    "models": ["qwen3.5-plus"],
-    "description": "快速 & 低成本"
+    "models": [
+      {"id": "Qwen3-27B-AWQ", "provider": "local"},
+      {"id": "qwen3.5-plus", "provider": "bailian"}
+    ],
+    "description": "快速 & 低成本 — 简单问答、分类、寒暄"
+  },
+  {
+    "tier": "t1",
+    "models": [
+      {"id": "MiniMax-M2.5", "provider": "bailian"}
+    ],
+    "description": "均衡 — 翻译、总结、常规编程任务",
+    "threshold": 0.4
   },
   {
     "tier": "t2",
-    "models": ["glm-5", "qwen3-max-2026-01-23"],
-    "description": "最佳质量"
+    "models": [
+      {"id": "kimi-k2.5", "provider": "bailian"}
+    ],
+    "description": "最佳质量 — 复杂编程、代码分析、调试",
+    "threshold": 0.6
+  },
+  {
+    "tier": "t3",
+    "models": [
+      {"id": "qwen3-coder-plus", "provider": "bailian"}
+    ],
+    "description": "深度推理 — 架构设计、复杂推理、代码优化"
   }
 ]
 ```
+
+**每模型独立配置 provider**：同一层级的模型可以来自不同厂商。
+例如 t0 中 `Qwen3-27B-AWQ` 是本地部署（`local`），`qwen3.5-plus` 走百炼（`bailian`）。
 
 改完立即生效。运行中重载：
 
@@ -318,10 +360,52 @@ router.get_available_tiers()
 
 | 端点 | 方法 | 说明 |
 |------|------|------|
-| `/health` | GET | 健康检查 |
-| `/classify` | POST | 分类请求 |
+| `/health` | GET | 健康检查，返回服务状态和可用层级 |
+| `/classify` | POST | 分类请求，返回 tier + model + provider |
 | `/tiers` | GET | 列出所有层级 |
 | `/tiers/reload` | POST | 重载层级配置 |
+| `/health/status` | GET | 各 tier 下每个模型的健康状态和 provider |
+| `/health/report` | POST | 报告模型失败（参数 `model_name`） |
+
+### 健康检查示例
+
+```bash
+GET /health/status
+```
+```json
+{
+  "t0": {
+    "models": {
+      "Qwen3-27B-AWQ": {"healthy": true, "provider": "local"},
+      "qwen3.5-plus": {"healthy": true, "provider": "bailian"}
+    }
+  },
+  "t1": {
+    "models": {
+      "MiniMax-M2.5": {"healthy": true, "provider": "bailian"}
+    }
+  }
+}
+```
+
+```bash
+POST /health/report?model_name=kimi-k2.5
+```
+
+报告模型失败后，该模型在 300 秒内连续 3 次失败会被暂时排除，
+路由器自动选择同层级下一个健康的模型。
+
+## 指定模型
+
+如果用户在消息中明确指定了模型（如 "使用模型 Qwen3-27B-AWQ 回答天气"），
+路由器会直接使用该模型，跳过分类逻辑：
+
+```python
+router.classify("使用模型 Qwen3-27B-AWQ 回答成都今天天气")
+# → ("Qwen3-27B-AWQ", 1.0, "user_specified", {"model": "Qwen3-27B-AWQ", "provider": "local", ...})
+```
+
+支持的指定格式：`使用模型 XXX`、`用模型 XXX`、`model: XXX`、`model=XXX`
 
 ## 工作原理（简介）
 

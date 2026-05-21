@@ -193,7 +193,7 @@ uvicorn server.service:app --host 0.0.0.0 --port 8100
 Verify / 验证服务：
 ```bash
 curl http://localhost:8100/health
-# → {"status": "ok", "model_loaded": true, "tiers": ["t0", "t1", "t2", "t3"]}
+# → {"status": "ok", "tiers": ["t0", "t1", "t2", "t3"]}
 ```
 
 #### Step 2: Configure the OpenClaw Plugin / 配置 OpenClaw 插件
@@ -218,17 +218,20 @@ MODEL_ROUTER_URL=http://localhost:8100
 
 #### Step 3: Plugin Works Automatically / 插件自动生效
 
-The plugin registers as a `preRequest` hook. Before each LLM request:
-插件注册为 `preRequest` 钩子。每次 OpenClaw 发 LLM 请求前：
+The plugin registers as a `before_model_resolve` hook. Before each LLM request:
+插件注册为 `before_model_resolve` 钩子。每次 OpenClaw 发 LLM 请求前：
 
 ```
 User sends message / 用户发消息
-  → OpenClaw triggers preRequest hook / 触发 preRequest 钩子
+  → OpenClaw triggers before_model_resolve hook / 触发 before_model_resolve 钩子
     → Node.js plugin POSTs to http://localhost:8100/classify / 调用 HTTP 接口
-    → Returns tier + confidence / 返回 tier 和置信度
-    → Plugin replaces context.model with the tier's model / 替换模型
-  → OpenClaw sends LLM request (with the replaced model) / 发送 LLM 请求
+    → Returns tier + model + provider + confidence
+    → Plugin returns { modelOverride, providerOverride }
+  → OpenClaw sends LLM request (with the replaced model and provider) / 发送 LLM 请求
 ```
+
+The plugin uses `model` and `provider` returned by the service directly — no hardcoded tier-to-model mapping needed.
+插件直接使用服务返回的 `model` 和 `provider`，无需在插件侧硬编码映射。
 
 **Manual API call (without plugin) / 手动调用服务（不用插件）：**
 
@@ -245,10 +248,15 @@ Response / 返回：
 ```json
 {
   "tier": "t2",
+  "model": "kimi-k2.5",
+  "provider": "bailian",
   "confidence": 0.87,
-  "source": "lgbm_main",
+  "source": "v4_phase3",
   "extra": {
-    "trajectory": "COLD_START",
+    "route_class": "R2",
+    "difficulty_score": 0.72,
+    "thinking_mode": "T2",
+    "prompt_policy": "P2",
     "flags": {}
   }
 }
@@ -275,8 +283,19 @@ console.log(data.tier); // → "t0"
 |------------|-------------|-------------------|
 | `tier` | `str` | Tier ID (`t0`/`t1`/`t2`/`t3`) |
 | `confidence` | `float` | Classification confidence (0.0 ~ 1.0) / 分类置信度 |
-| `source` | `str` | Decision source (`lgbm_main` / `lgbm_aux` / `mlp`) |
-| `extra` | `dict` | Metadata (trajectory, flags, etc.) / 元数据 |
+| `source` | `str` | Decision source (`v4_phase3` / `heuristic` / `user_specified`) |
+| `extra` | `dict` | Metadata (route_class, difficulty_score, model, provider, etc.) / 元数据 |
+
+HTTP `/classify` endpoint returns / 端点返回：
+
+| Field / 字段 | Type / 类型 | Description / 说明 |
+|--------------|-------------|-------------------|
+| `tier` | `str` | Tier ID |
+| `model` | `str` | Selected model ID |
+| `provider` | `str` | Model provider (`bailian` / `local` etc.) |
+| `confidence` | `float` | Classification confidence |
+| `source` | `str` | Decision source |
+| `extra` | `dict` | Additional metadata |
 
 ## Route Classes / 路由类别
 
@@ -298,16 +317,42 @@ Edit `tiers.json` / 编辑 `tiers.json`：
 [
   {
     "tier": "t0",
-    "models": ["qwen3.5-plus"],
-    "description": "Fast & cheap / 快速低成本"
+    "models": [
+      {"id": "Qwen3-27B-AWQ", "provider": "local"},
+      {"id": "qwen3.5-plus", "provider": "bailian"}
+    ],
+    "description": "Fast & low cost — Q&A, classification, greetings"
+  },
+  {
+    "tier": "t1",
+    "models": [
+      {"id": "MiniMax-M2.5", "provider": "bailian"}
+    ],
+    "description": "Balanced — translation, summarization, routine coding",
+    "threshold": 0.4
   },
   {
     "tier": "t2",
-    "models": ["glm-5", "qwen3-max-2026-01-23"],
-    "description": "Best quality / 最佳质量"
+    "models": [
+      {"id": "kimi-k2.5", "provider": "bailian"}
+    ],
+    "description": "Best quality — complex coding, code analysis, debugging",
+    "threshold": 0.6
+  },
+  {
+    "tier": "t3",
+    "models": [
+      {"id": "qwen3-coder-plus", "provider": "bailian"}
+    ],
+    "description": "Deep reasoning — architecture design, complex reasoning, code optimization"
   }
 ]
 ```
+
+**Per-model provider**: models within the same tier can come from different providers.
+For example, in t0, `Qwen3-27B-AWQ` is locally deployed (`local`) while `qwen3.5-plus` uses bailian (`bailian`).
+
+**每模型独立配置 provider**：同一层级的模型可以来自不同厂商。
 
 Changes take effect immediately. Reload at runtime / 改完立即生效，运行中重载：
 
@@ -331,10 +376,50 @@ router.get_available_tiers()
 
 | Endpoint / 端点 | Method / 方法 | Description / 说明 |
 |-----------------|---------------|-------------------|
-| `/health` | GET | Health check / 健康检查 |
-| `/classify` | POST | Classification request / 分类请求 |
+| `/health` | GET | Health check, returns service status and available tiers |
+| `/classify` | POST | Classification request, returns tier + model + provider |
 | `/tiers` | GET | List all tiers / 列出所有层级 |
 | `/tiers/reload` | POST | Reload tier config / 重载层级配置 |
+| `/health/status` | GET | Per-model health status and provider for each tier |
+| `/health/report` | POST | Report model failure (param `model_name`) |
+
+### Health Check Example / 健康检查示例
+
+```bash
+GET /health/status
+```
+```json
+{
+  "t0": {
+    "models": {
+      "Qwen3-27B-AWQ": {"healthy": true, "provider": "local"},
+      "qwen3.5-plus": {"healthy": true, "provider": "bailian"}
+    }
+  },
+  "t1": {
+    "models": {
+      "MiniMax-M2.5": {"healthy": true, "provider": "bailian"}
+    }
+  }
+}
+```
+
+```bash
+POST /health/report?model_name=kimi-k2.5
+```
+
+After a model is reported as failed, it is temporarily excluded after 3 consecutive failures within 300 seconds. The router automatically selects the next healthy model in the same tier.
+
+### User-Specified Model / 指定模型
+
+If a user explicitly specifies a model in the message (e.g., "使用模型 Qwen3-27B-AWQ 回答天气"), the router uses that model directly, skipping classification:
+
+```python
+router.classify("使用模型 Qwen3-27B-AWQ 回答成都今天天气")
+# → ("Qwen3-27B-AWQ", 1.0, "user_specified", {"model": "Qwen3-27B-AWQ", "provider": "local", ...})
+```
+
+Supported formats: `使用模型 XXX`, `用模型 XXX`, `model: XXX`, `model=XXX`
 
 ## How It Works (Brief) / 工作原理（简介）
 
