@@ -1,5 +1,5 @@
-# Models - now included in repo (Git LFS recommended for large files)
-# models/
+# Models (downloaded via scripts/download_models.py)
+models/
 
 # Python
 __pycache__/

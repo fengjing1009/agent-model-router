@@ -44,8 +44,8 @@ pip install -e ".[ml]"
 python scripts/download_models.py
 ```
 
-Models are downloaded to `models/` (about 500MB, gitignored).
-模型文件会下载到 `models/` 目录（约 500MB，已 gitignore）。
+Models are downloaded to `models/` (about 84MB, gitignored).
+模型文件会下载到 `models/` 目录（约 84MB，已 gitignore）。
 
 ### 3. Try It / 试一下
 
