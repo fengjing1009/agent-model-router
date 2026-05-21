@@ -1,8 +1,8 @@
 /**
  * agent-model-router OpenClaw Plugin
  *
- * Registers a preRequest hook that calls the agent-model-router HTTP service
- * to classify the user prompt and select the optimal model tier.
+ * Registers a before_model_resolve hook that calls the agent-model-router HTTP
+ * service to classify the user prompt and select the optimal model tier.
  *
  * Configuration (in OpenClaw config):
  * {
@@ -22,16 +22,20 @@ const DEFAULT_SERVICE_URL = process.env.MODEL_ROUTER_URL || "http://localhost:81
 /**
  * Core routing logic — calls the HTTP service and modifies the model.
  */
-async function routeModel(api, context) {
-  const { messages, model, sessionId } = context;
+async function routeModel(api, ctx) {
   const config = api.pluginConfig || {};
   const serviceUrl = config.serviceUrl || DEFAULT_SERVICE_URL;
+
+  // Extract messages from conversation context
+  const messages = ctx.conversation?.messages || ctx.messages || [];
+  const sessionId = ctx.sessionId || ctx.session?.id;
+  const currentModel = ctx.model;
 
   if (!messages || messages.length === 0) {
     return;
   }
 
-  // Extract user message and history
+  // Extract last user message and history
   let userMessage = "";
   const history = [];
   for (const msg of messages) {
@@ -40,6 +44,8 @@ async function routeModel(api, context) {
     }
     history.push(msg);
   }
+
+  if (!userMessage) return;
 
   try {
     const response = await fetch(`${serviceUrl}/classify`, {
@@ -55,7 +61,7 @@ async function routeModel(api, context) {
 
     if (!response.ok) {
       api.logger?.warn?.(
-        `[agent-model-router] Service returned ${response.status}, using original model: ${model}`,
+        `[agent-model-router] Service returned ${response.status}, using original model: ${currentModel}`,
       );
       return;
     }
@@ -76,15 +82,18 @@ async function routeModel(api, context) {
       t3: "qwen3-coder-plus",
     };
 
-    // Update the model in the context
-    const newModel = extra?.model || tierModelMap[tier] || model;
-    if (newModel !== model) {
+    const newModel = extra?.model || tierModelMap[tier];
+    if (newModel && newModel !== currentModel) {
       api.logger?.info?.(
-        `[agent-model-router] Model changed: ${model} → ${newModel}`,
+        `[agent-model-router] Model changed: ${currentModel} → ${newModel}`,
       );
+      // Set the model — OpenClaw reads ctx.model
+      ctx.model = newModel;
+      if (ctx.options) ctx.options.model = newModel;
     }
-    context.model = newModel;
-    context.routerMetadata = { tier, confidence, source, extra };
+
+    // Attach metadata
+    ctx.routerMetadata = { tier, confidence, source, extra };
   } catch (error) {
     if (error.name === "TimeoutError" || error.name === "AbortError") {
       api.logger?.warn?.("[agent-model-router] Service timeout, using original model");
@@ -96,12 +105,11 @@ async function routeModel(api, context) {
 
 /**
  * OpenClaw plugin register function.
- * Called when the plugin is loaded by OpenClaw.
  */
 export function register(api) {
-  api.registerHook("preRequest", async (context) => {
-    await routeModel(api, context);
-    return context;
+  api.registerHook("before_model_resolve", async (ctx) => {
+    await routeModel(api, ctx);
+    return ctx;
   }, { name: "agent-model-router" });
 }
 
