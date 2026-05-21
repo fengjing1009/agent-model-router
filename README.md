@@ -35,6 +35,7 @@ Map the returned `tier` to your own model IDs and you're done.
 ```bash
 git clone https://github.com/fengjing1009/agent-model-router.git
 cd agent-model-router
+python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[ml]"
 ```
 
@@ -44,25 +45,43 @@ pip install -e ".[ml]"
 python scripts/download_models.py
 ```
 
-Models are downloaded to `models/` (about 84MB, gitignored).
-模型文件会下载到 `models/` 目录（约 84MB，已 gitignore）。
+Models are downloaded to `models/v4.2_phase3_inference/` (about 84MB, gitignored).
+模型文件会下载到 `models/v4.2_phase3_inference/` 目录（约 84MB，已 gitignore）。
 
 ### 3. Try It / 试一下
 
 ```bash
 python -c "
 from model_router import ModelRouter
-r = ModelRouter()
+r = ModelRouter()  # auto-loads models/v4.2_phase3_inference/
+print(r.classify('你好'))
 print(r.classify('用 Python 实现一个快速排序'))
+print(r.classify('对比分析微服务架构和单体架构的优劣'))
 "
 ```
 
 Output / 输出：
 ```
-('t2', 0.87, 'lgbm_main', {'trajectory': 'COLD_START', 'flags': {}})
+('t0', 0.97, 'v4_phase3', {...})   # 简单问候 → fast model
+('t1', 0.59, 'v4_phase3', {...})   # 常规编程 → standard model
+('t2', 0.02, 'v4_phase3', {...})   # 架构分析 → premium model
 ```
-- `t2` = premium tier → complex programming task / 复杂编程任务
-- `0.87` = confidence / 置信度
+
+### Quick Start: HTTP Service / 快速启动 HTTP 服务
+
+Start the router as an HTTP API for Node.js (OpenClaw) or other frameworks:
+启动为 HTTP 服务，供 Node.js（OpenClaw）或其他框架调用：
+
+```bash
+# 1. Install & download models (see steps 1-2 above) / 安装并下载模型
+# 2. Start server / 启动服务
+uvicorn server.service:app --host 0.0.0.0 --port 8100
+
+# 3. Test / 测试
+curl -X POST http://localhost:8100/classify \
+  -H "Content-Type: application/json" \
+  -d '{"message": "你好", "history": []}'
+```
 
 ---
 
