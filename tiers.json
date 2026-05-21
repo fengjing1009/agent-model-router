@@ -8,7 +8,6 @@
   {
     "tier": "t0",
     "models": [
-      {"id": "Qwen3-27B-AWQ", "provider": "local"},
       {"id": "qwen3.5-plus", "provider": "bailian"}
     ],
     "description": "快速 & 低成本 — 简单问答、分类、寒暄"
