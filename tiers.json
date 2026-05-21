@@ -16,8 +16,8 @@
   {
     "tier": "t1",
     "models": [
-      {"id": "MiniMax-M2.5", "provider": "bailian"},
-      {"id": "qwen3-max-2026-01-23", "provider": "bailian"}
+      {"id": "qwen3-max-2026-01-23", "provider": "bailian"},
+      {"id": "MiniMax-M2.5", "provider": "bailian"}
     ],
     "description": "均衡 — 翻译、总结、常规编程任务",
     "threshold": 0.4
