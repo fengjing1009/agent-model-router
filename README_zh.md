@@ -39,9 +39,11 @@ bash scripts/setup.sh
 # 完整模式（ML 智能推理，推荐）
 bash scripts/setup.sh --ml
 
-# 完整模式 + 启动 HTTP 服务
-bash scripts/setup.sh --ml --server
+# 自定义端口
+bash scripts/setup.sh --ml --port 9000
 ```
+
+安装完成后，HTTP 服务作为 systemd 服务自动运行在 8100 端口。
 
 ### 手动安装
 
@@ -81,15 +83,19 @@ print(r.classify('对比分析微服务架构和单体架构的优劣'))
 
 供 Node.js（OpenClaw）或其他框架调用：
 
-```bash
-# 1. 安装并下载模型（见上面步骤 1-2）
-# 2. 启动服务
-uvicorn server.service:app --host 0.0.0.0 --port 8100
+一键安装脚本会自动安装为 systemd 服务，无需手动启动。
 
-# 3. 测试
+```bash
+# 运行 bash scripts/setup.sh --ml 后:
+curl http://localhost:8100/health
 curl -X POST http://localhost:8100/classify \
   -H "Content-Type: application/json" \
   -d '{"message": "你好", "history": []}'
+
+# 管理服务:
+sudo systemctl status agent-model-router   # 查看状态
+sudo systemctl restart agent-model-router  # 重启
+sudo systemctl logs agent-model-router     # 查看日志
 ```
 
 ---

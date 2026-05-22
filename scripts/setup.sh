@@ -2,26 +2,25 @@
 # setup.sh - One-click install & start for agent-model-router
 #
 # Usage:
-#   ./setup.sh              # Basic mode (rule-based routing, no models needed)
+#   ./setup.sh              # Basic mode (rule-based routing, no models)
 #   ./setup.sh --ml         # Full mode (ML inference + download models)
-#   ./setup.sh --server     # Basic + start HTTP service
-#   ./setup.sh --ml --server # Full + start HTTP service
+#   ./setup.sh --port 8200  # Custom port (default 8100)
 
 set -e
 
 cd "$(dirname "$0")/.."
 
 MODE="basic"
-SERVER=false
+PORT=8100
 
 for arg in "$@"; do
     case "$arg" in
         --ml)    MODE="ml" ;;
-        --server) SERVER=true ;;
+        --port)  PORT="$2"; shift ;;
         --help|-h)
-            echo "Usage: $0 [--ml] [--server]"
+            echo "Usage: $0 [--ml] [--port PORT]"
             echo "  --ml       Install ML dependencies and download models (recommended)"
-            echo "  --server   Start HTTP service after installation"
+            echo "  --port     HTTP service port (default: 8100)"
             exit 0
             ;;
         *)
@@ -31,62 +30,93 @@ for arg in "$@"; do
     esac
 done
 
+PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+VENV_DIR="${PROJECT_DIR}/.venv"
+SERVICE_NAME="agent-model-router"
+SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
+
 echo "=============================="
 echo " agent-model-router Setup"
 echo " Mode: $MODE"
-echo " Start server: $SERVER"
+echo " Port: $PORT"
 echo "=============================="
 
 # Step 1: Create virtual environment
-if [ ! -d ".venv" ]; then
+if [ ! -d "$VENV_DIR" ]; then
     echo "[1/4] Creating virtual environment..."
-    python3 -m venv .venv
+    python3 -m venv "$VENV_DIR"
 else
     echo "[1/4] Virtual environment already exists"
 fi
 
-# shellcheck disable=SC1091
-source .venv/bin/activate
-
 # Step 2: Install package
 if [ "$MODE" = "ml" ]; then
     echo "[2/4] Installing with ML dependencies (numpy, lightgbm, onnxruntime, scikit-learn)..."
-    pip install -e ".[ml]" -q
+    "$VENV_DIR/bin/pip" install -e ".[ml]" -q
 else
     echo "[2/4] Installing core package..."
-    pip install -e . -q
+    "$VENV_DIR/bin/pip" install -e . -q
 fi
 
 # Step 3: Download models (ML mode only)
 if [ "$MODE" = "ml" ]; then
-    if [ -f "models/v4.2_phase3_inference/lgbm_main.bin" ]; then
+    if [ -f "${PROJECT_DIR}/models/v4.2_phase3_inference/lgbm_main.bin" ]; then
         echo "[3/4] Models already downloaded, skipping"
     else
         echo "[3/4] Downloading ML models (~84MB)..."
-        python scripts/download_models.py
+        "$VENV_DIR/bin/python" scripts/download_models.py
     fi
 else
     echo "[3/4] Skipping model download (basic mode, run with --ml to enable ML routing)"
 fi
 
-# Step 4: Start HTTP service (if requested)
-if [ "$SERVER" = true ]; then
-    echo "[4/4] Starting HTTP service on port 8100..."
-    echo ""
-    echo "Test it in another terminal:"
-    echo "  curl -X POST http://localhost:8100/classify -H 'Content-Type: application/json' -d '{\"message\": \"你好\"}'"
-    echo ""
-    uvicorn server.service:app --host 0.0.0.0 --port 8100
-else
-    echo "[4/4] Done!"
-    echo ""
-    echo "Usage:"
-    echo "  # Python direct import / Python 直接调用:"
-    echo "  source .venv/bin/activate"
-    echo '  python -c "from model_router import ModelRouter; print(ModelRouter().classify('\''你好'\''))"'
-    echo ""
-    echo "  # Start HTTP service / 启动 HTTP 服务:"
-    echo "  $0 $([ "$MODE" = ml ] && echo --ml )--server"
-    echo "  # or manually:"
-    echo "  source .venv/bin/activate && uvicorn server.service:app --host 0.0.0.0 --port 8100"
+# Step 4: Install & start systemd service
+echo "[4/4] Installing systemd service..."
+if [ -f "$SERVICE_FILE" ]; then
+    echo "  Service already exists, reinstalling..."
+    sudo systemctl stop "$SERVICE_NAME" 2>/dev/null || true
 fi
+
+sudo tee "$SERVICE_FILE" > /dev/null <<EOF
+[Unit]
+Description=Agent Model Router - LLM Intelligent Routing Engine
+After=network.target
+
+[Service]
+Type=simple
+User=$USER
+WorkingDirectory=${PROJECT_DIR}
+ExecStart=${VENV_DIR}/bin/uvicorn server.service:app --host 0.0.0.0 --port ${PORT}
+Restart=always
+RestartSec=5
+Environment=PATH=${VENV_DIR}/bin:/usr/bin
+Environment=MODEL_ROUTER_PORT=${PORT}
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+sudo systemctl daemon-reload
+sudo systemctl enable "$SERVICE_NAME"
+sudo systemctl start "$SERVICE_NAME"
+
+# Wait for service to start
+sleep 2
+
+echo ""
+echo "=============================="
+echo " Setup Complete!"
+echo "=============================="
+echo ""
+echo "Service status:"
+sudo systemctl status "$SERVICE_NAME" --no-pager -l 2>/dev/null || systemctl status "$SERVICE_NAME" --no-pager -l 2>/dev/null || true
+echo ""
+echo "Useful commands:"
+echo "  sudo systemctl status ${SERVICE_NAME}    # Check status"
+echo "  sudo systemctl restart ${SERVICE_NAME}   # Restart"
+echo "  sudo systemctl logs ${SERVICE_NAME}      # View logs"
+echo "  sudo systemctl stop ${SERVICE_NAME}      # Stop"
+echo ""
+echo "Test:"
+echo "  curl http://localhost:${PORT}/health"
+echo "  curl -X POST http://localhost:${PORT}/classify -H 'Content-Type: application/json' -d '{\"message\": \"你好\"}'"

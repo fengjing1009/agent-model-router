@@ -42,9 +42,12 @@ bash scripts/setup.sh
 # Full mode (ML inference) / 完整模式（推荐）
 bash scripts/setup.sh --ml
 
-# Full mode + start HTTP service / 完整模式 + 启动服务
-bash scripts/setup.sh --ml --server
+# Custom port / 自定义端口
+bash scripts/setup.sh --ml --port 9000
 ```
+
+After setup, the HTTP service runs as a systemd service on port 8100.
+安装完成后，HTTP 服务作为 systemd 服务运行在 8100 端口。
 
 ### Manual Install / 手动安装
 
@@ -85,18 +88,20 @@ Output / 输出：
 
 ### Quick Start: HTTP Service / 快速启动 HTTP 服务
 
-Start the router as an HTTP API for Node.js (OpenClaw) or other frameworks:
-启动为 HTTP 服务，供 Node.js（OpenClaw）或其他框架调用：
+Setup script auto-installs as a systemd service — no manual start needed.
+一键安装脚本会自动安装为 systemd 服务，无需手动启动。
 
 ```bash
-# 1. Install & download models (see steps 1-2 above) / 安装并下载模型
-# 2. Start server / 启动服务
-uvicorn server.service:app --host 0.0.0.0 --port 8100
-
-# 3. Test / 测试
+# After running bash scripts/setup.sh --ml / 运行一键安装后:
+curl http://localhost:8100/health
 curl -X POST http://localhost:8100/classify \
   -H "Content-Type: application/json" \
   -d '{"message": "你好", "history": []}'
+
+# Manage service / 管理服务:
+sudo systemctl status agent-model-router   # Check status / 查看状态
+sudo systemctl restart agent-model-router  # Restart / 重启
+sudo systemctl logs agent-model-router     # View logs / 查看日志
 ```
 
 ---
