@@ -116,6 +116,8 @@ def classify(request: ClassifyRequest):
     )
     model = extra.pop("model", "")
     provider = extra.pop("provider", "")
+    print(f"[model-router] classify: tier={tier} model={model} provider={provider} "
+          f"confidence={confidence:.2f} source={source} message={request.message[:60]!r}")
     return ClassifyResponse(
         tier=tier,
         model=model,
