@@ -10,12 +10,14 @@ import ssl
 import urllib.request
 from pathlib import Path
 
-GITHUB_REPO = "opensquilla/opensquilla"
-BRANCH = "main"
-MODEL_PATH = "src/opensquilla/squilla_router/models/v4.2_phase3_inference"
+# Use Gitee mirror for fast download in China
+GITEE_OWNER = "peterpan10009"
+GITEE_REPO = "agent-model-router"
+BRANCH = "master"
+MODEL_PATH = "models/v4.2_phase3_inference"
 
-# Non-LFS files: served via raw.githubusercontent.com
-RAW_FILES = [
+# Files to download directly from Gitee repo
+REPO_FILES = [
     "bge_onnx/config.json",
     "bge_onnx/special_tokens_map.json",
     "bge_onnx/tokenizer.json",
@@ -26,10 +28,6 @@ RAW_FILES = [
     "mlp/scaler.joblib",
     "router.runtime.yaml",
     "version.json",
-]
-
-# LFS files: need media.githubusercontent.com to get actual binaries
-LFS_FILES = [
     "bge_onnx/model.onnx",
     "features/bge_pca.joblib",
     "features/config.pkl",
@@ -40,8 +38,6 @@ LFS_FILES = [
     "mlp/model.onnx",
 ]
 
-ALL_FILES = RAW_FILES + LFS_FILES
-
 
 def _sha256(path: Path) -> str:
     h = hashlib.sha256()
@@ -51,29 +47,22 @@ def _sha256(path: Path) -> str:
     return h.hexdigest()
 
 
-def _raw_url(file_path: str) -> str:
-    return f"https://raw.githubusercontent.com/{GITHUB_REPO}/{BRANCH}/{MODEL_PATH}/{file_path}"
-
-
-def _media_url(file_path: str) -> str:
-    return f"https://media.githubusercontent.com/media/{GITHUB_REPO}/{BRANCH}/{MODEL_PATH}/{file_path}"
+def _gitee_url(file_path: str) -> str:
+    return f"https://gitee.com/{GITEE_OWNER}/{GITEE_REPO}/raw/{BRANCH}/{MODEL_PATH}/{file_path}"
 
 
 def download(output_dir: Path) -> bool:
-    """Download model artifacts from OpenSquilla.
-
-    Uses raw.githubusercontent.com for small files and
-    media.githubusercontent.com for Git LFS binary files.
+    """Download model artifacts from Gitee repo.
 
     Returns True on success.
     """
     output_dir.mkdir(parents=True, exist_ok=True)
     ctx = ssl.create_default_context()
-    total = len(ALL_FILES)
+    total = len(REPO_FILES)
     errors = []
 
-    for i, file_path in enumerate(ALL_FILES, 1):
-        url = _media_url(file_path) if file_path in LFS_FILES else _raw_url(file_path)
+    for i, file_path in enumerate(REPO_FILES, 1):
+        url = _gitee_url(file_path)
         dest = output_dir / file_path
         dest.parent.mkdir(parents=True, exist_ok=True)
 
@@ -82,14 +71,6 @@ def download(output_dir: Path) -> bool:
             req = urllib.request.Request(url)
             with urllib.request.urlopen(req, context=ctx, timeout=120) as resp:
                 data = resp.read()
-
-            # For LFS files, verify we didn't get a pointer
-            if file_path in LFS_FILES and len(data) < 200:
-                text = data.decode("utf-8", errors="ignore")
-                if text.startswith("version https://git-lfs.github.com/"):
-                    print(f"FAILED (got Git LFS pointer)")
-                    errors.append(file_path)
-                    continue
 
             dest.write_bytes(data)
             size_mb = dest.stat().st_size / (1024 * 1024)
