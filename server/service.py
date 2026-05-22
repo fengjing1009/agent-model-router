@@ -47,8 +47,8 @@ def _discover_openclaw_models() -> set[str]:
 async def lifespan(app: FastAPI):
     """Initialize router on startup. Auto-discover OpenClaw models."""
     router = ModelRouter(
-        bundle_dir=os.environ.get("MODEL_ROUTER_MODELS_DIR", "./models"),
-        tiers_path=os.environ.get("MODEL_ROUTER_TIERS_PATH", "./tiers.json"),
+        bundle_dir=os.environ.get("MODEL_ROUTER_MODELS_DIR"),
+        tiers_path=os.environ.get("MODEL_ROUTER_TIERS_PATH"),
     )
     app.state.router = router
     app.state._config_mtime = 0.0
@@ -157,15 +157,16 @@ def health_status():
 def get_tiers():
     """List available model tiers."""
     router: ModelRouter = app.state.router
+    tiers_data = router._load_tiers()
     return {
         "tiers": [
             {
-                "tier": t.tier,
-                "models": t.models,
-                "description": t.description,
-                "threshold": t.threshold,
+                "tier": t["tier"],
+                "models": t["models"],
+                "description": t.get("description", ""),
+                "threshold": t.get("threshold"),
             }
-            for t in router.tiers
+            for t in tiers_data
         ]
     }
 
