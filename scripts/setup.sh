@@ -42,20 +42,44 @@ echo " Port: $PORT"
 echo "=============================="
 
 # Step 1: Create virtual environment
-if [ ! -d "$VENV_DIR" ]; then
+if [ ! -d "$VENV_DIR" ] || [ ! -x "$VENV_DIR/bin/python3" ]; then
     echo "[1/4] Creating virtual environment..."
-    python3 -m venv "$VENV_DIR"
+    # Try to create venv; if python3-venv is missing, try installing it
+    python3 -m venv "$VENV_DIR" 2>/dev/null || {
+        echo "  python3-venv package not found, trying to install..."
+        sudo apt-get install -y python3-venv >/dev/null 2>&1 || {
+            echo "  Failed to install python3-venv. Using system Python directly."
+            VENV_DIR="$PROJECT_DIR/.venv"
+            mkdir -p "$VENV_DIR/bin"
+            # Create symlinks to system Python
+            ln -sf "$(which python3)" "$VENV_DIR/bin/python3"
+            ln -sf "$(which python3)" "$VENV_DIR/bin/python"
+            # Use pipx or system pip
+            python3 -m pip install --user venv >/dev/null 2>&1 || true
+        }
+        python3 -m venv "$VENV_DIR"
+    }
 else
     echo "[1/4] Virtual environment already exists"
 fi
 
 # Step 2: Install package
+PIP_CMD="$VENV_DIR/bin/pip"
+# Try standard install first; if it fails (HTTPS blocked), use HTTP mirror
+try_install() {
+    $PIP_CMD install -q "$@" 2>/dev/null && return 0
+    echo "  Standard pip install failed, trying HTTP mirror..."
+    $PIP_CMD config set global.index-url http://mirrors.aliyun.com/pypi/simple/
+    $PIP_CMD config set global.trusted-host mirrors.aliyun.com
+    $PIP_CMD install -q "$@"
+}
+
 if [ "$MODE" = "ml" ]; then
     echo "[2/4] Installing with ML dependencies (numpy, lightgbm, onnxruntime, scikit-learn)..."
-    "$VENV_DIR/bin/pip" install -e ".[ml]" -q
+    try_install -e ".[ml]"
 else
     echo "[2/4] Installing core package..."
-    "$VENV_DIR/bin/pip" install -e . -q
+    try_install -e .
 fi
 
 # Step 3: Download models (ML mode only)
