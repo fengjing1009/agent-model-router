@@ -44,19 +44,10 @@ echo "=============================="
 # Step 1: Create virtual environment
 if [ ! -d "$VENV_DIR" ] || [ ! -x "$VENV_DIR/bin/python3" ]; then
     echo "[1/4] Creating virtual environment..."
-    # Try to create venv; if python3-venv is missing, try installing it
+    rm -rf "$VENV_DIR"
     python3 -m venv "$VENV_DIR" 2>/dev/null || {
-        echo "  python3-venv package not found, trying to install..."
-        sudo apt-get install -y python3-venv >/dev/null 2>&1 || {
-            echo "  Failed to install python3-venv. Using system Python directly."
-            VENV_DIR="$PROJECT_DIR/.venv"
-            mkdir -p "$VENV_DIR/bin"
-            # Create symlinks to system Python
-            ln -sf "$(which python3)" "$VENV_DIR/bin/python3"
-            ln -sf "$(which python3)" "$VENV_DIR/bin/python"
-            # Use pipx or system pip
-            python3 -m pip install --user venv >/dev/null 2>&1 || true
-        }
+        echo "  python3-venv not available, installing python3-venv..."
+        sudo apt-get update -qq && sudo apt-get install -y -qq python3-venv
         python3 -m venv "$VENV_DIR"
     }
 else
